@@ -15,16 +15,17 @@ public class ScheduleRealtimePublisher {
     private final SimpMessagingTemplate messagingTemplate;
 
     public void publishScheduleChanged(String scheduleId, String event, String message) {
-        if (scheduleId == null) {
-            return;
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("event", event);
+        if (scheduleId != null) {
+            payload.put("scheduleId", scheduleId);
         }
-        Map<String, Object> payload = Map.of(
-                "event", event,
-                "scheduleId", scheduleId,
-                "message", message != null ? message : ""
-        );
+        payload.put("message", message != null ? message : "");
+
         try {
-            messagingTemplate.convertAndSend("/topic/schedules/" + scheduleId, payload);
+            if (scheduleId != null) {
+                messagingTemplate.convertAndSend("/topic/schedules/" + scheduleId, payload);
+            }
             messagingTemplate.convertAndSend("/topic/schedules", payload);
         } catch (Exception e) {
             log.warn("Failed to publish schedule realtime event {}: {}", event, e.getMessage());

@@ -12,14 +12,21 @@ import java.time.LocalDateTime;
 @Table(name = "leave_requests")
 @Getter
 @Setter
-@NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class LeaveRequest {
 
+    public LeaveRequest() {
+        this.id = java.util.UUID.randomUUID().toString();
+    }
+
     @Id
     @Column(columnDefinition = "CHAR(36)", length = 36)
     private String id;
+
+    public void setId(String id) {
+        this.id = (id != null) ? id : java.util.UUID.randomUUID().toString();
+    }
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "employee_id", nullable = false)
@@ -48,6 +55,9 @@ public class LeaveRequest {
     @Builder.Default
     private LocalDateTime requestedAt = LocalDateTime.now();
 
+    @Column(name = "reason", length = 255)
+    private String reason;
+
     @Column(name = "decided_at")
     private LocalDateTime decidedAt;
 
@@ -55,6 +65,38 @@ public class LeaveRequest {
     @Column(nullable = false)
     @Builder.Default
     private Integer version = 0;
+
+    public void setLeaveType(LeaveType leaveType) {
+        this.leaveType = leaveType;
+    }
+
+    public void setLeaveType(String leaveType) {
+        if (leaveType == null || leaveType.isBlank()) {
+            this.leaveType = LeaveType.ANNUAL;
+            return;
+        }
+        this.leaveType = LeaveType.valueOf(leaveType.trim().toUpperCase());
+    }
+
+    public void setStatus(LeaveStatus status) {
+        this.status = status;
+    }
+
+    public void setStatus(String status) {
+        if (status == null || status.isBlank()) {
+            this.status = LeaveStatus.PENDING;
+            return;
+        }
+        this.status = LeaveStatus.valueOf(status.trim().toUpperCase());
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return this.requestedAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.requestedAt = createdAt;
+    }
 
     @PrePersist
     public void prePersist() {

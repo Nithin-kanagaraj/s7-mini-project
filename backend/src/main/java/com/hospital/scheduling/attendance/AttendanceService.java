@@ -38,6 +38,13 @@ public class AttendanceService {
     private final OvertimeHoursCalculator overtimeHoursCalculator;
 
     @Transactional
+    public AttendanceRecordDto recordAttendance(String assignmentId, AttendanceClockInRequestDto dto, String recorderUserId) {
+        User recorder = userRepository.findById(recorderUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + recorderUserId));
+        return recordAttendance(assignmentId, dto, UserPrincipal.create(recorder));
+    }
+
+    @Transactional
     public AttendanceRecordDto recordAttendance(
             String assignmentId,
             AttendanceClockInRequestDto dto,
@@ -96,8 +103,11 @@ public class AttendanceService {
         result.setWeeklyCountableHours(snapshot.weeklyHours());
         result.setMaxWeeklyHours(snapshot.maxWeeklyHours());
         result.setOvertimeHoursDetected(snapshot.overtimeHours());
-        result.setOvertimeApproved(Boolean.TRUE.equals(assignment.getIsOvertime()) || Boolean.TRUE.equals(dto.getApproveOvertime()));
-        result.setOvertimeApprovalRequired(snapshot.overtimeHours() > 0 && !Boolean.TRUE.equals(result.getOvertimeApproved()));
+        boolean overtimeApproved = Boolean.TRUE.equals(assignment.getIsOvertime())
+                || Boolean.TRUE.equals(dto.getApproveOvertime())
+                || snapshot.overtimeHours() > 0;
+        result.setOvertimeApproved(overtimeApproved);
+        result.setOvertimeApprovalRequired(snapshot.overtimeHours() > 0 && !overtimeApproved);
         return result;
     }
 
@@ -117,8 +127,8 @@ public class AttendanceService {
 
     /**
      * Recalculates weekly countable hours (actual when present, else planned).
-     * Does not silently approve overtime: {@code is_overtime} is set only when
-     * the assignment was already approved or {@code approveOvertime} is true.
+     * If the employee exceeds the configured weekly cap, all countable assignments
+     * in that week are flagged for overtime automatically.
      */
     private WeeklyOvertimeSnapshot applyWeeklyOvertimeFlags(Employee employee, LocalDate assignmentDate, boolean approveOvertime) {
         LocalDate weekStart = assignmentDate.with(DayOfWeek.MONDAY);
@@ -140,16 +150,12 @@ public class AttendanceService {
 
         double overtimeHours = overtimeHoursCalculator.overtimeBeyondCap(runningHours, maxWeeklyHours);
 
-        if (approveOvertime && overtimeHours > 0) {
-            double remainingCap = maxWeeklyHours;
+        if (overtimeHours > 0) {
             for (ScheduleAssignment sa : weekAssignments) {
                 if (!overtimeHoursCalculator.isCountableAssignment(sa)) {
                     continue;
                 }
-                List<AttendanceRecord> attendance = attendanceRecordRepository.findByAssignmentId(sa.getId());
-                double hours = overtimeHoursCalculator.hoursFor(sa, attendance).getCountableHours();
-                remainingCap -= hours;
-                if (remainingCap < 0 && !Boolean.TRUE.equals(sa.getIsOvertime())) {
+                if (!Boolean.TRUE.equals(sa.getIsOvertime())) {
                     sa.setIsOvertime(true);
                     scheduleAssignmentRepository.save(sa);
                 }

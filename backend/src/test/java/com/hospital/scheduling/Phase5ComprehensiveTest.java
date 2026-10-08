@@ -19,11 +19,12 @@ import com.hospital.scheduling.report.ReportService;
 import com.hospital.scheduling.report.dto.CoverageReportDto;
 import com.hospital.scheduling.report.dto.FairnessReportDto;
 import com.hospital.scheduling.report.dto.OvertimeReportDto;
+import com.hospital.scheduling.schedule.AssignmentStatus;
 import com.hospital.scheduling.schedule.ScheduleAssignment;
 import com.hospital.scheduling.schedule.ScheduleAssignmentRepository;
 import com.hospital.scheduling.schedule.ScheduleService;
-import com.hospital.scheduling.shifttemplate.ShiftTemplate;
-import com.hospital.scheduling.shifttemplate.ShiftTemplateRepository;
+import com.hospital.scheduling.shift.ShiftTemplate;
+import com.hospital.scheduling.shift.ShiftTemplateRepository;
 import com.hospital.scheduling.user.User;
 import com.hospital.scheduling.user.UserRepository;
 import org.junit.jupiter.api.*;
@@ -409,7 +410,7 @@ class Phase5ComprehensiveTest {
 
         // Verify the assignment was marked NEEDS_REASSIGNMENT
         ScheduleAssignment updated = assignmentRepository.findById(published.getId()).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo("NEEDS_REASSIGNMENT");
+        assertThat(updated.getStatus()).isEqualTo(AssignmentStatus.NEEDS_REASSIGNMENT);
 
         // Verify WebSocket broadcast was triggered for conflict
         verify(messagingTemplate, atLeastOnce()).convertAndSend(eq("/topic/schedules"), any(Object.class));
@@ -610,9 +611,9 @@ class Phase5ComprehensiveTest {
         int s2 = f2.get(30, TimeUnit.SECONDS);
         pool.shutdown();
 
-        // Tally results
+        // Tally results. The generate endpoint returns 201 Created for the accepted request.
         for (int s : List.of(s1, s2)) {
-            if (s == 202 || s == 200) accepted.incrementAndGet();
+            if (s == 201 || s == 202 || s == 200) accepted.incrementAndGet();
             else if (s == 409) conflict.incrementAndGet();
         }
 
@@ -679,7 +680,7 @@ class Phase5ComprehensiveTest {
 
         // Step 4: Verify NEEDS_REASSIGNMENT
         ScheduleAssignment updated = assignmentRepository.findById(pubAssignment.getId()).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo("NEEDS_REASSIGNMENT");
+        assertThat(updated.getStatus()).isEqualTo(AssignmentStatus.NEEDS_REASSIGNMENT);
 
         // Step 5: Verify at least one CONFLICT notification was persisted
         long notifsAfter = notificationRepository.count();

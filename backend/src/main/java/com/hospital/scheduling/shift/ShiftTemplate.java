@@ -1,5 +1,6 @@
 package com.hospital.scheduling.shift;
 
+import com.hospital.scheduling.department.Department;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -30,6 +31,17 @@ public class ShiftTemplate {
 
     @Column(name = "duration_hours", nullable = false, precision = 4, scale = 2)
     private BigDecimal durationHours;
+
+    @Transient
+    private Department department;
+
+    public Department getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(Department department) {
+        this.department = department;
+    }
 
     @PrePersist
     public void prePersist() {

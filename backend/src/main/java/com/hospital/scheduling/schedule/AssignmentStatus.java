@@ -5,5 +5,6 @@ public enum AssignmentStatus {
     UNFILLED,
     SWAP_PENDING,
     CANCELLED,
-    NEEDS_REASSIGNMENT
+    NEEDS_REASSIGNMENT,
+    PUBLISHED
 }

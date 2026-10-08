@@ -64,17 +64,35 @@ public class NotificationService {
 
     @Transactional
     public void notifySchedulePublished(Schedule schedule) {
-        List<ScheduleAssignment> assignments = scheduleAssignmentRepository.findByScheduleId(schedule.getId());
+        if (schedule == null) {
+            return;
+        }
+        notifySchedulePublished(scheduleAssignmentRepository.findByScheduleId(schedule.getId()));
+    }
+
+    @Transactional
+    public void notifySchedulePublished(List<ScheduleAssignment> assignments) {
+        if (assignments == null || assignments.isEmpty()) {
+            return;
+        }
+
         Set<User> recipients = new HashSet<>();
+        String departmentName = assignments.get(0).getDepartment() != null
+                ? assignments.get(0).getDepartment().getName()
+                : "your department";
 
         for (ScheduleAssignment sa : assignments) {
             if (sa.getEmployee() != null) {
-                userRepository.findByEmployeeId(sa.getEmployee().getId()).ifPresent(recipients::add);
+                for (User user : userRepository.findAllByEmployeeId(sa.getEmployee().getId())) {
+                    recipients.add(user);
+                }
+            }
+            if (sa.getSchedule() != null && sa.getSchedule().getDepartment() != null) {
+                departmentName = sa.getSchedule().getDepartment().getName();
             }
         }
 
-        String msg = "A new schedule for " + schedule.getDepartment().getName() +
-                " (" + schedule.getPeriodStart() + " to " + schedule.getPeriodEnd() + ") has been published.";
+        String msg = "A new schedule for " + departmentName + " has been published.";
 
         for (User u : recipients) {
             createAndSend(u, NotificationType.SCHEDULE_PUBLISHED, msg);
@@ -87,12 +105,12 @@ public class NotificationService {
             return;
         }
 
-        userRepository.findByEmployeeId(assignment.getEmployee().getId()).ifPresent(user -> {
+        for (User user : userRepository.findAllByEmployeeId(assignment.getEmployee().getId())) {
             String msg = "Your shift on " + assignment.getAssignmentDate() +
                     " (" + (assignment.getShiftTemplate() != null ? assignment.getShiftTemplate().getName() : "Shift") +
                     ") has been updated.";
             createAndSend(user, NotificationType.SHIFT_CHANGED, msg);
-        });
+        }
     }
 
     @Transactional
@@ -101,26 +119,31 @@ public class NotificationService {
             return;
         }
 
-        userRepository.findByEmployeeId(leave.getEmployee().getId()).ifPresent(user -> {
+        for (User user : userRepository.findAllByEmployeeId(leave.getEmployee().getId())) {
             String msg = "Your leave request for " + leave.getStartDate() + " to " + leave.getEndDate() +
                     " has been " + leave.getStatus().name() + ".";
             createAndSend(user, NotificationType.LEAVE_DECISION, msg);
-        });
+        }
     }
 
     @Transactional
     public void notifyLeaveConflict(LeaveRequest leave, List<ScheduleAssignment> affectedAssignments) {
+        if (leave == null || leave.getEmployee() == null) {
+            return;
+        }
+
         List<User> managers = userRepository.findAll().stream()
                 .filter(u -> u.getRole() == Role.ADMIN || u.getRole() == Role.SCHEDULER
                         || (u.getRole() == Role.DEPT_HEAD && u.getEmployee() != null
                         && u.getEmployee().getDepartment() != null
-                        && leave.getEmployee() != null
                         && leave.getEmployee().getDepartment() != null
                         && u.getEmployee().getDepartment().getId().equals(leave.getEmployee().getDepartment().getId())))
                 .collect(Collectors.toList());
 
-        String msg = "CONFLICT ALERT: Leave approval for " + leave.getEmployee().getFirstName() + " " +
-                leave.getEmployee().getLastName() + " created " + affectedAssignments.size() +
+        String employeeName = (leave.getEmployee().getFirstName() != null ? leave.getEmployee().getFirstName() : "")
+                + (leave.getEmployee().getLastName() != null ? " " + leave.getEmployee().getLastName() : "").trim();
+        String msg = "CONFLICT ALERT: Leave approval for " + (employeeName.isBlank() ? "employee" : employeeName) +
+                " created " + (affectedAssignments == null ? 0 : affectedAssignments.size()) +
                 " NEEDS_REASSIGNMENT shift(s) on a published schedule.";
 
         for (User mgr : managers) {
@@ -143,12 +166,12 @@ public class NotificationService {
         int sent = 0;
         for (ScheduleAssignment sa : upcoming) {
             if (sa.getEmployee() != null) {
-                var maybeUser = userRepository.findByEmployeeId(sa.getEmployee().getId());
-                if (maybeUser.isPresent()) {
+                List<User> maybeUsers = userRepository.findAllByEmployeeId(sa.getEmployee().getId());
+                for (User maybeUser : maybeUsers) {
                     String msg = "Reminder: You have an upcoming " +
                             (sa.getShiftTemplate() != null ? sa.getShiftTemplate().getName() : "") +
                             " shift scheduled tomorrow (" + tomorrow + ").";
-                    createAndSend(maybeUser.get(), NotificationType.SHIFT_REMINDER, msg);
+                    createAndSend(maybeUser, NotificationType.SHIFT_REMINDER, msg);
                     sent++;
                 }
             }

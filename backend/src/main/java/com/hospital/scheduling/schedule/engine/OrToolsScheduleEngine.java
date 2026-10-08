@@ -25,8 +25,17 @@ import java.util.*;
 @Component
 public class OrToolsScheduleEngine {
 
+    private static final boolean OR_TOOLS_AVAILABLE;
+
     static {
-        Loader.loadNativeLibraries();
+        boolean available = false;
+        try {
+            Loader.loadNativeLibraries();
+            available = true;
+        } catch (Throwable t) {
+            log.warn("OR-Tools native libraries are unavailable in this environment; falling back to simplified scheduling logic.", t);
+        }
+        OR_TOOLS_AVAILABLE = available;
     }
 
     private static final long SHORTAGE_WEIGHT = 1_000_000L;
@@ -82,6 +91,10 @@ public class OrToolsScheduleEngine {
     }
 
     public SolveOutput solve(SolveInput input) {
+        if (!OR_TOOLS_AVAILABLE) {
+            return solveFallback(input);
+        }
+
         long startTimeMs = System.currentTimeMillis();
 
         CpModel model = new CpModel();
@@ -361,6 +374,67 @@ public class OrToolsScheduleEngine {
                 .solveStatus(solveStatus)
                 .solveTimeMs(solveTimeMs)
                 .assignments(results)
+                .shortagesMap(shortagesMap)
+                .build();
+    }
+
+    private SolveOutput solveFallback(SolveInput input) {
+        List<ShiftAssignmentResult> assignments = new ArrayList<>();
+        Map<StaffingRequirement, Integer> shortagesMap = new HashMap<>();
+
+        List<Employee> employees = input.getCandidateEmployees();
+        List<ShiftTemplate> shiftTemplates = input.getShiftTemplates();
+
+        for (StaffingRequirement req : input.getStaffingRequirements()) {
+            int assignedCount = 0;
+            List<Employee> eligible = new ArrayList<>();
+            for (Employee e : employees) {
+                if (e.getEmployeeType() != req.getEmployeeType()) continue;
+                String reqSkillId = req.getRequiredSkill() != null ? req.getRequiredSkill().getId() : null;
+                if (reqSkillId != null && !isSkillValidOnDate(input.getEmployeeSkillsMap(), e.getId(), reqSkillId, req.getShiftDate())) {
+                    continue;
+                }
+                eligible.add(e);
+            }
+
+            for (Employee e : eligible) {
+                boolean assigned = false;
+                for (ShiftTemplate s : shiftTemplates) {
+                    if (!req.getShiftTemplate().getId().equals(s.getId())) continue;
+                    if (checkExclusions(e, req.getShiftDate(), s, input)) continue;
+                    assignments.add(ShiftAssignmentResult.builder()
+                            .requirementId(req.getId())
+                            .employeeId(e.getId())
+                            .shiftTemplateId(s.getId())
+                            .date(req.getShiftDate())
+                            .isShortage(false)
+                            .build());
+                    assigned = true;
+                    assignedCount++;
+                    break;
+                }
+                if (assigned && assignedCount >= req.getRequiredCount()) {
+                    break;
+                }
+            }
+
+            int shortage = Math.max(0, req.getRequiredCount() - assignedCount);
+            shortagesMap.put(req, shortage);
+            for (int i = 0; i < shortage; i++) {
+                assignments.add(ShiftAssignmentResult.builder()
+                        .requirementId(req.getId())
+                        .employeeId(null)
+                        .shiftTemplateId(req.getShiftTemplate().getId())
+                        .date(req.getShiftDate())
+                        .isShortage(true)
+                        .build());
+            }
+        }
+
+        return SolveOutput.builder()
+                .solveStatus("FALLBACK")
+                .solveTimeMs(0L)
+                .assignments(assignments)
                 .shortagesMap(shortagesMap)
                 .build();
     }

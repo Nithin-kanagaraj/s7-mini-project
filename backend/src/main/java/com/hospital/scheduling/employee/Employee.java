@@ -60,10 +60,44 @@ public class Employee {
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    public String getEmployeeId() {
+        return this.id;
+    }
+
+    public void setEmployeeId(String employeeId) {
+        this.id = employeeId;
+    }
+
+    public String getEmail() {
+        return this.contactEmail;
+    }
+
+    public void setEmail(String email) {
+        this.contactEmail = email;
+    }
+
+    public String getEmploymentType() {
+        return this.employeeType != null ? this.employeeType.name() : null;
+    }
+
+    public void setEmploymentType(String employmentType) {
+        if (employmentType == null || employmentType.isBlank()) {
+            return;
+        }
+        String normalized = employmentType.trim().toUpperCase();
+        if ("FULL_TIME".equals(normalized)) {
+            normalized = "NURSE";
+        }
+        this.employeeType = EmployeeType.valueOf(normalized);
+    }
+
     @PrePersist
     public void prePersist() {
         if (id == null) {
             id = java.util.UUID.randomUUID().toString();
+        }
+        if (hireDate == null) {
+            hireDate = LocalDate.now();
         }
         if (createdAt == null) {
             createdAt = LocalDateTime.now();

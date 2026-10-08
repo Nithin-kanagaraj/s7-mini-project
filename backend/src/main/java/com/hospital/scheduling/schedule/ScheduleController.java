@@ -70,6 +70,16 @@ public class ScheduleController {
         return ResponseEntity.ok(scheduleService.updateAssignment(id, assignmentId, dto, principal));
     }
 
+    @PatchMapping("/assignments/{assignmentId}")
+    @PreAuthorize("hasAnyRole('ADMIN','SCHEDULER')")
+    public ResponseEntity<ScheduleAssignmentResponseDto> updateAssignmentLegacy(
+            @PathVariable String assignmentId,
+            @Valid @RequestBody AssignmentEditRequestDto dto,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        return ResponseEntity.ok(scheduleService.updateAssignmentById(assignmentId, dto, principal));
+    }
+
     @PostMapping("/{id}/publish")
     @PreAuthorize("hasAnyRole('ADMIN','SCHEDULER')")
     public ResponseEntity<ScheduleResponseDto> publishSchedule(

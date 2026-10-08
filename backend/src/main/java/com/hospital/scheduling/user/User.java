@@ -44,6 +44,18 @@ public class User {
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
+    public void setRole(Role role) {
+        this.role = role;
+    }
+
+    public void setRole(String roleName) {
+        if (roleName == null || roleName.isBlank()) {
+            this.role = Role.WORKER;
+            return;
+        }
+        this.role = Role.valueOf(roleName.trim().toUpperCase());
+    }
+
     @PrePersist
     public void prePersist() {
         if (id == null) {

@@ -1,5 +1,6 @@
 package com.hospital.scheduling.common.security;
 
+import com.hospital.scheduling.user.Role;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -44,6 +45,23 @@ public class JwtTokenProvider {
                 .expiration(expiryDate)
                 .signWith(key)
                 .compact();
+    }
+
+    public String generateToken(String username, String userId, Role role, String employeeId, String departmentId) {
+        UserPrincipal principal = new UserPrincipal(
+                userId,
+                username,
+                null,
+                role,
+                employeeId,
+                null,
+                null,
+                departmentId,
+                null,
+                true,
+                java.util.Collections.emptyList()
+        );
+        return generateAccessTokenFromPrincipal(principal);
     }
 
     public String getUserIdFromToken(String token) {

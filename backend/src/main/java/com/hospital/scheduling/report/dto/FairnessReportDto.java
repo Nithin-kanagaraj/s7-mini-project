@@ -17,6 +17,18 @@ public class FairnessReportDto {
     private Double weekendShiftsVariance;
     private List<EmployeeFairnessMetrics> employeeMetrics;
 
+    public Double getTotalShiftVariance() {
+        return totalShiftsVariance;
+    }
+
+    public Double getNightShiftVariance() {
+        return nightShiftsVariance;
+    }
+
+    public Double getWeekendShiftVariance() {
+        return weekendShiftsVariance;
+    }
+
     @Getter
     @Setter
     @NoArgsConstructor

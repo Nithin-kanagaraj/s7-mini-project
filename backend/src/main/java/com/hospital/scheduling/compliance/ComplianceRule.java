@@ -25,6 +25,16 @@ public class ComplianceRule {
     @Column(name = "rule_value", nullable = false)
     private Integer ruleValue;
 
+    public void setRuleValue(Integer ruleValue) {
+        this.ruleValue = ruleValue;
+    }
+
+    public void setRuleValue(java.math.BigDecimal ruleValue) {
+        if (ruleValue != null) {
+            this.ruleValue = ruleValue.intValue();
+        }
+    }
+
     @Column(columnDefinition = "TEXT")
     private String description;
 

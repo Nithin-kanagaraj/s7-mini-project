@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Client } from '@stomp/stompjs';
 import { Bell, Check, AlertTriangle, Info, Calendar, Clock, AlertCircle } from 'lucide-react';
 
 interface NotificationItem {
@@ -14,6 +15,7 @@ export const NotificationCenter: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const [wsReconnecting, setWsReconnecting] = useState<boolean>(false);
 
   const fetchNotifications = async () => {
     try {
@@ -43,11 +45,54 @@ export const NotificationCenter: React.FC = () => {
   useEffect(() => {
     fetchNotifications();
 
-    // Poll periodically as fallback / STOMP simulation
-    const interval = setInterval(fetchNotifications, 15000);
-    setWsConnected(true);
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
 
-    return () => clearInterval(interval);
+    const client = new Client({
+      brokerURL: `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`,
+      connectHeaders: { Authorization: `Bearer ${token}` },
+      reconnectDelay: 5000,
+      onConnect: () => {
+        setWsConnected(true);
+        setWsReconnecting(false);
+
+        client.subscribe('/user/queue/notifications', (message) => {
+          try {
+            const dto: NotificationItem = JSON.parse(message.body);
+            setNotifications((prev) => [dto, ...prev.filter((item) => item.id !== dto.id)]);
+            setUnreadCount((prev) => (dto.isRead ? prev : prev + 1));
+            void fetchNotifications();
+          } catch (e) {
+            console.error('Notification message parse failed', e);
+          }
+        });
+
+        client.subscribe('/topic/schedules', () => {
+          void fetchNotifications();
+        });
+      },
+      onDisconnect: () => {
+        setWsConnected(false);
+        setWsReconnecting(true);
+      },
+      onWebSocketError: () => {
+        setWsConnected(false);
+        setWsReconnecting(true);
+      },
+      onStompError: () => {
+        setWsConnected(false);
+        setWsReconnecting(true);
+      },
+    });
+
+    client.activate();
+
+    const interval = setInterval(fetchNotifications, 15000);
+
+    return () => {
+      clearInterval(interval);
+      client.deactivate();
+    };
   }, []);
 
   const handleMarkAsRead = async (id: string, e: React.MouseEvent) => {

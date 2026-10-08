@@ -14,17 +14,24 @@ import java.time.LocalDateTime;
 @Table(name = "schedule_assignments")
 @Getter
 @Setter
-@NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class ScheduleAssignment {
+
+    public ScheduleAssignment() {
+        this.id = java.util.UUID.randomUUID().toString();
+    }
 
     @Id
     @Column(columnDefinition = "CHAR(36)", length = 36)
     private String id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "schedule_id", nullable = false)
+    public void setId(String id) {
+        this.id = (id != null) ? id : java.util.UUID.randomUUID().toString();
+    }
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "schedule_id", nullable = true)
     private Schedule schedule;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -34,6 +41,13 @@ public class ScheduleAssignment {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "department_id", nullable = false)
     private Department department;
+
+    public void setEmployee(Employee employee) {
+        this.employee = employee;
+        if (this.department == null && employee != null && employee.getDepartment() != null) {
+            this.department = employee.getDepartment();
+        }
+    }
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "shift_template_id", nullable = false)
@@ -63,10 +77,25 @@ public class ScheduleAssignment {
     @Builder.Default
     private Integer version = 0;
 
+    public void setStatus(AssignmentStatus status) {
+        this.status = status;
+    }
+
+    public void setStatus(String status) {
+        if (status == null || status.isBlank()) {
+            this.status = AssignmentStatus.ASSIGNED;
+            return;
+        }
+        this.status = AssignmentStatus.valueOf(status.trim().toUpperCase());
+    }
+
     @PrePersist
     public void prePersist() {
         if (id == null) {
             id = java.util.UUID.randomUUID().toString();
+        }
+        if (department == null && employee != null && employee.getDepartment() != null) {
+            department = employee.getDepartment();
         }
     }
 }

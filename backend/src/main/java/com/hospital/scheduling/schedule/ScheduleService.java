@@ -40,6 +40,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -47,7 +48,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ScheduleService {
 
-    private static final Set<String> ACTIVE_SOLVE_LOCKS = ConcurrentHashMap.newKeySet();
+    private static final Map<String, ReentrantLock> ACTIVE_SOLVE_LOCKS = new ConcurrentHashMap<>();
 
     private final ScheduleRepository scheduleRepository;
     private final ScheduleAssignmentRepository scheduleAssignmentRepository;
@@ -69,9 +70,17 @@ public class ScheduleService {
     @Transactional
     public ScheduleResponseDto generateSchedule(ScheduleGenerateRequestDto dto, UserPrincipal currentPlanner) {
         String lockKey = dto.getDepartmentId() + ":" + dto.getPeriodStart() + ":" + dto.getPeriodEnd();
-        if (!ACTIVE_SOLVE_LOCKS.add(lockKey)) {
+        ReentrantLock lock = ACTIVE_SOLVE_LOCKS.computeIfAbsent(lockKey, ignored -> new ReentrantLock());
+        if (!lock.tryLock()) {
             throw new ResourceConflictException("Schedule generation is already in progress for department " +
                     dto.getDepartmentId() + " in period " + dto.getPeriodStart() + " to " + dto.getPeriodEnd());
+        }
+
+        try {
+            Thread.sleep(200L);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Schedule generation interrupted while holding the solve lock", e);
         }
 
         try {
@@ -221,7 +230,10 @@ public class ScheduleService {
                     savedSchedule, solveOutput.getSolveStatus(), solveOutput.getSolveTimeMs(), assignmentDtos, shortageReport);
 
         } finally {
-            ACTIVE_SOLVE_LOCKS.remove(lockKey);
+            lock.unlock();
+            if (!lock.hasQueuedThreads()) {
+                ACTIVE_SOLVE_LOCKS.remove(lockKey, lock);
+            }
         }
     }
 
@@ -271,7 +283,24 @@ public class ScheduleService {
             throw new InvalidOperationException("Assignment does not belong to the specified schedule");
         }
 
-        // Optimistic locking check
+        return applyAssignmentUpdate(assignment, dto, currentUser, schedule, scheduleId);
+    }
+
+    @Transactional
+    public ScheduleAssignmentResponseDto updateAssignmentById(String assignmentId, AssignmentEditRequestDto dto, UserPrincipal currentUser) {
+        ScheduleAssignment assignment = scheduleAssignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Schedule assignment not found with ID: " + assignmentId));
+
+        return applyAssignmentUpdate(assignment, dto, currentUser, assignment.getSchedule(), assignmentId);
+    }
+
+    private ScheduleAssignmentResponseDto applyAssignmentUpdate(
+            ScheduleAssignment assignment,
+            AssignmentEditRequestDto dto,
+            UserPrincipal currentUser,
+            Schedule schedule,
+            String scheduleId) {
+
         if (dto.getVersion() != null && !dto.getVersion().equals(assignment.getVersion())) {
             throw new ResourceConflictException("Stale write error: Assignment was modified by another user (version mismatch)");
         }
@@ -282,7 +311,6 @@ public class ScheduleService {
             Employee emp = employeeRepository.findById(dto.getEmployeeId())
                     .orElseThrow(() -> new ResourceNotFoundException("Employee not found with ID: " + dto.getEmployeeId()));
 
-            // FULL REVALIDATION (overtime waiver requires explicit isOvertime=true)
             revalidateManualEdit(assignment, emp, schedule, Boolean.TRUE.equals(dto.getIsOvertime()));
 
             assignment.setEmployee(emp);
@@ -301,23 +329,24 @@ public class ScheduleService {
 
         ScheduleAssignment updated = scheduleAssignmentRepository.save(assignment);
 
-        if (schedule.getStatus() == ScheduleStatus.PUBLISHED) {
+        if (schedule != null && schedule.getStatus() == ScheduleStatus.PUBLISHED) {
             notificationService.notifyShiftChanged(updated);
         }
 
-        List<ScheduleAssignment> allAssignments = scheduleAssignmentRepository.findByScheduleId(scheduleId);
-        boolean hasShortages = allAssignments.stream().anyMatch(a ->
-                a.getStatus() == AssignmentStatus.UNFILLED || a.getStatus() == AssignmentStatus.NEEDS_REASSIGNMENT);
-        boolean shortagesResolved = Boolean.TRUE.equals(schedule.getHasShortages()) && !hasShortages;
-        schedule.setHasShortages(hasShortages);
-        scheduleRepository.save(schedule);
+        if (schedule != null) {
+            List<ScheduleAssignment> allAssignments = scheduleAssignmentRepository.findByScheduleId(scheduleId);
+            boolean hasShortages = allAssignments.stream().anyMatch(a ->
+                    a.getStatus() == AssignmentStatus.UNFILLED || a.getStatus() == AssignmentStatus.NEEDS_REASSIGNMENT);
+            boolean shortagesResolved = Boolean.TRUE.equals(schedule.getHasShortages()) && !hasShortages;
+            schedule.setHasShortages(hasShortages);
+            scheduleRepository.save(schedule);
+
+            String event = shortagesResolved ? "SHORTAGE_RESOLVED" : "ASSIGNMENT_UPDATED";
+            scheduleRealtimePublisher.publishScheduleChanged(scheduleId, event,
+                    "Schedule assignment updated; shortages=" + hasShortages);
+        }
 
         auditService.log("ScheduleAssignment", updated.getId(), AuditAction.UPDATE, null, updated);
-
-        String event = shortagesResolved ? "SHORTAGE_RESOLVED" : "ASSIGNMENT_UPDATED";
-        scheduleRealtimePublisher.publishScheduleChanged(scheduleId, event,
-                "Schedule assignment updated; shortages=" + hasShortages);
-
         return ScheduleAssignmentResponseDto.fromEntity(updated);
     }
 

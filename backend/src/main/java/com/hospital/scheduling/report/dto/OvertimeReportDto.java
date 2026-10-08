@@ -18,6 +18,10 @@ public class OvertimeReportDto {
     private Double totalOvertimeHours;
     private List<EmployeeOvertimeSummary> employeeSummaries;
 
+    public List<EmployeeOvertimeSummary> getEmployeeOvertimeSummaries() {
+        return employeeSummaries;
+    }
+
     @Getter
     @Setter
     @NoArgsConstructor

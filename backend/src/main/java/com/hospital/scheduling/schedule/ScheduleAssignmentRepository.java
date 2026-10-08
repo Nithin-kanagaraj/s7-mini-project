@@ -14,12 +14,13 @@ public interface ScheduleAssignmentRepository extends JpaRepository<ScheduleAssi
     void deleteByScheduleId(String scheduleId);
 
     List<ScheduleAssignment> findByEmployeeIdAndAssignmentDate(String employeeId, LocalDate assignmentDate);
+    List<ScheduleAssignment> findByEmployee_IdAndAssignmentDate(String employeeId, LocalDate assignmentDate);
     List<ScheduleAssignment> findByEmployeeIdAndAssignmentDateBetween(String employeeId, LocalDate startDate, LocalDate endDate);
 
     @Query("SELECT sa FROM ScheduleAssignment sa WHERE " +
            "sa.employee.id = :employeeId AND " +
-           "sa.schedule.status = 'PUBLISHED' AND " +
-           "sa.status = 'ASSIGNED' AND " +
+           "(sa.schedule IS NULL OR sa.schedule.status = 'PUBLISHED') AND " +
+           "sa.status IN ('ASSIGNED', 'PUBLISHED') AND " +
            "sa.assignmentDate BETWEEN :start AND :end")
     List<ScheduleAssignment> findPublishedAssignmentsForEmployeeInRange(
             @Param("employeeId") String employeeId,
@@ -29,8 +30,8 @@ public interface ScheduleAssignmentRepository extends JpaRepository<ScheduleAssi
 
     @Query("SELECT sa FROM ScheduleAssignment sa WHERE " +
            "sa.department.id = :departmentId AND " +
-           "sa.schedule.status = 'PUBLISHED' AND " +
-           "sa.status = 'ASSIGNED' AND " +
+           "(sa.schedule IS NULL OR sa.schedule.status = 'PUBLISHED') AND " +
+           "sa.status IN ('ASSIGNED', 'PUBLISHED') AND " +
            "sa.assignmentDate BETWEEN :start AND :end")
     List<ScheduleAssignment> findPublishedAssignmentsInDepartmentInRange(
             @Param("departmentId") String departmentId,

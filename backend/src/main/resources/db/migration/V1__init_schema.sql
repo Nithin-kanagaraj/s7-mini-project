@@ -103,6 +103,7 @@ CREATE TABLE leave_requests (
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
+    reason VARCHAR(255) NULL,
     approved_by CHAR(36) NULL,
     requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     decided_at DATETIME NULL,
@@ -143,12 +144,12 @@ CREATE INDEX idx_sched_dept_period ON schedules(department_id, period_start, per
 
 CREATE TABLE schedule_assignments (
     id CHAR(36) PRIMARY KEY,
-    schedule_id CHAR(36) NOT NULL,
+    schedule_id CHAR(36) NULL,
     employee_id CHAR(36) NULL,
     department_id CHAR(36) NOT NULL,
     shift_template_id CHAR(36) NOT NULL,
     assignment_date DATE NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'ASSIGNED' CHECK (status IN ('ASSIGNED','UNFILLED','SWAP_PENDING','CANCELLED','NEEDS_REASSIGNMENT')),
+    status VARCHAR(20) NOT NULL DEFAULT 'ASSIGNED' CHECK (status IN ('ASSIGNED','UNFILLED','SWAP_PENDING','CANCELLED','NEEDS_REASSIGNMENT','PUBLISHED')),
     is_overtime BOOLEAN NOT NULL DEFAULT false,
     last_modified_by CHAR(36) NULL,
     last_modified_at DATETIME NULL,

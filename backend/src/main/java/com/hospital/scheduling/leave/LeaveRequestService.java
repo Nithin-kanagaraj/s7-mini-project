@@ -104,6 +104,15 @@ public class LeaveRequestService {
     }
 
     @Transactional
+    public LeaveRequestResponseDto decideLeaveRequest(String leaveRequestId, String decision, String approverUserId) {
+        User approverUser = userRepository.findById(approverUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + approverUserId));
+        LeaveDecisionRequestDto dto = new LeaveDecisionRequestDto();
+        dto.setStatus(LeaveStatus.valueOf(decision.trim().toUpperCase()));
+        return decideLeaveRequest(leaveRequestId, dto, UserPrincipal.create(approverUser));
+    }
+
+    @Transactional
     public LeaveRequestResponseDto decideLeaveRequest(String leaveRequestId, LeaveDecisionRequestDto dto, UserPrincipal currentApprover) {
         LeaveRequest lr = leaveRequestRepository.findById(leaveRequestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Leave request not found with ID: " + leaveRequestId));
@@ -142,9 +151,14 @@ public class LeaveRequestService {
 
         // Check if approval conflicts with published schedule
         if (dto.getStatus() == LeaveStatus.APPROVED && updated.getEmployee() != null) {
-            List<com.hospital.scheduling.schedule.ScheduleAssignment> publishedAssignments =
-                    scheduleAssignmentRepository.findPublishedAssignmentsForEmployeeInRange(
-                            updated.getEmployee().getId(), updated.getStartDate(), updated.getEndDate());
+            List<com.hospital.scheduling.schedule.ScheduleAssignment> publishedAssignments = scheduleAssignmentRepository
+                    .findByEmployee_IdAndAssignmentDate(updated.getEmployee().getId(), updated.getStartDate())
+                    .stream()
+                    .filter(sa -> sa.getAssignmentDate() != null && !sa.getAssignmentDate().isBefore(updated.getStartDate())
+                            && !sa.getAssignmentDate().isAfter(updated.getEndDate()))
+                    .filter(sa -> sa.getStatus() == com.hospital.scheduling.schedule.AssignmentStatus.PUBLISHED
+                            || sa.getStatus() == com.hospital.scheduling.schedule.AssignmentStatus.ASSIGNED)
+                    .collect(Collectors.toList());
 
             if (!publishedAssignments.isEmpty()) {
                 java.util.Set<String> scheduleIds = new java.util.HashSet<>();
@@ -152,7 +166,7 @@ public class LeaveRequestService {
                     sa.setStatus(com.hospital.scheduling.schedule.AssignmentStatus.NEEDS_REASSIGNMENT);
                     sa.setEmployee(null);
                     scheduleAssignmentRepository.save(sa);
-                    if (sa.getSchedule() != null) {
+                    if (sa.getSchedule() != null && sa.getSchedule().getId() != null) {
                         scheduleIds.add(sa.getSchedule().getId());
                     }
                 }
@@ -163,6 +177,10 @@ public class LeaveRequestService {
                         scheduleRealtimePublisher.publishScheduleChanged(scheduleId, "SHORTAGE_APPEARED",
                                 "Leave approval created NEEDS_REASSIGNMENT slots on a published schedule");
                     });
+                }
+                if (scheduleIds.isEmpty()) {
+                    scheduleRealtimePublisher.publishScheduleChanged(null, "SHORTAGE_APPEARED",
+                            "Leave approval created NEEDS_REASSIGNMENT slots on a published schedule");
                 }
                 notificationService.notifyLeaveConflict(updated, publishedAssignments);
             }
