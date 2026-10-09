@@ -56,12 +56,18 @@ public class AuditService {
 
     private String toJson(Object obj) {
         if (obj == null) return null;
-        if (obj instanceof String str) return str;
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (Exception e) {
             log.error("Failed to serialize object to json for audit log", e);
-            return obj.toString();
+            try {
+                return objectMapper.writeValueAsString(String.valueOf(obj));
+            } catch (Exception inner) {
+                String safeText = String.valueOf(obj)
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"");
+                return "\"" + safeText + "\"";
+            }
         }
     }
 }

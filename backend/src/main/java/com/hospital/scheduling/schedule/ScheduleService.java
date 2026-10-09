@@ -373,6 +373,14 @@ public class ScheduleService {
         schedule.setStatus(ScheduleStatus.PUBLISHED);
         schedule.setPublishedAt(LocalDateTime.now());
 
+        List<ScheduleAssignment> assignments = scheduleAssignmentRepository.findByScheduleId(id);
+        for (ScheduleAssignment assignment : assignments) {
+            if (assignment.getStatus() == AssignmentStatus.ASSIGNED) {
+                assignment.setStatus(AssignmentStatus.PUBLISHED);
+            }
+        }
+        scheduleAssignmentRepository.saveAll(assignments);
+
         Schedule updated = scheduleRepository.save(schedule);
 
         auditService.log("Schedule", updated.getId(), AuditAction.APPROVE, oldSnapshot, updated);
@@ -485,11 +493,22 @@ public class ScheduleService {
 
     @Transactional(readOnly = true)
     public List<ScheduleAssignmentResponseDto> getMyAssignments(UserPrincipal principal) {
-        if (principal.getEmployeeId() == null) {
+        String employeeId = principal.getEmployeeId();
+        if (employeeId == null || employeeId.isBlank()) {
+            if (principal.getId() != null && !principal.getId().isBlank()) {
+                employeeId = userRepository.findById(principal.getId())
+                        .map(User::getEmployee)
+                        .map(Employee::getId)
+                        .orElse(null);
+            }
+        }
+
+        if (employeeId == null || employeeId.isBlank()) {
             return Collections.emptyList();
         }
+
         List<ScheduleAssignment> assignments = scheduleAssignmentRepository
-                .findMyPublishedAssignments(principal.getEmployeeId());
+                .findMyPublishedAssignments(employeeId);
         return assignments.stream()
                 .map(ScheduleAssignmentResponseDto::fromEntity)
                 .collect(Collectors.toList());

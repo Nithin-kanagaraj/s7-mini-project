@@ -42,7 +42,7 @@ public interface ScheduleAssignmentRepository extends JpaRepository<ScheduleAssi
     @Query("SELECT sa FROM ScheduleAssignment sa WHERE " +
            "sa.employee.id = :employeeId AND " +
            "sa.schedule.status = 'PUBLISHED' AND " +
-           "sa.status = 'ASSIGNED' " +
+           "sa.status IN ('ASSIGNED', 'PUBLISHED') " +
            "ORDER BY sa.assignmentDate ASC")
     List<ScheduleAssignment> findMyPublishedAssignments(@Param("employeeId") String employeeId);
 }
