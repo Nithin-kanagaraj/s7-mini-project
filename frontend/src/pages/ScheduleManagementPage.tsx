@@ -637,7 +637,7 @@ export const ScheduleManagementPage: React.FC = () => {
                   }}
                   className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-sky-500"
                 >
-                  {existingSchedules.map((s) => (
+                  {existingSchedules.filter(s => s.status === 'PUBLISHED').map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.departmentName} ({s.periodStart} ~ {s.periodEnd}) - {s.status}
                     </option>
