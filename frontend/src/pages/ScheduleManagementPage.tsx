@@ -789,7 +789,7 @@ export const ScheduleManagementPage: React.FC = () => {
                       return (
                         <td key={shift.id} className="p-2 border-l border-slate-200 vertical-top">
                           {matchingAssignments.length === 0 ? (
-                            <span className="text-slate-400 italic text-[11px]">No requirement</span>
+                            <span className="text-slate-400 italic text-[11px]">No assignment</span>
                           ) : (
                             <div className="space-y-1.5">
                               {matchingAssignments.map((sa) => (
